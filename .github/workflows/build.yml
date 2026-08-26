@@ -72,13 +72,14 @@ jobs:
         ccache -M 10G
         ccache -z
         
-        # Limit Java Heap allocation to prevent OOM kills during Soong analysis
+        # Prevent Soong & Java Heap OOM Kills
         export _JAVA_OPTIONS="-Xmx4g"
+        export SOONG_PARALLEL_BUILD=2
         
         source build/envsetup.sh
         lunch lineage_sweet-userdebug
         
-        # Use -j2 to limit memory pressure on 7GB RAM runner
+        # Compile with 2 threads
         mka bacon -j2
         
         ccache -s
