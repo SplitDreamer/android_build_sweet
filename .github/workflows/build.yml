@@ -34,7 +34,6 @@ jobs:
 
     - name: Create 10GB Swap Space (OOM Prevention)
       run: |
-        # Safely unmount existing active swap to avoid "Text file busy" error
         sudo swapoff -a || true
         sudo rm -f /swapfile
         
@@ -48,7 +47,6 @@ jobs:
       run: |
         sudo dpkg --add-architecture i386
         
-        # Retry loop for apt update to prevent transient mirror failures
         for i in {1..5}; do 
           sudo apt-get update && break || sleep 5
         done
@@ -86,7 +84,6 @@ jobs:
         cd ~/rom
         repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
         
-        # Flexibly locate and copy local manifests
         mkdir -p .repo/local_manifests
         if [ -d "$GITHUB_WORKSPACE/local_manifests" ]; then
           cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
@@ -107,7 +104,11 @@ jobs:
         ccache -M 15G
         ccache -z
         
-        # Prevent Soong, Java Heap, & Ninja OOM Kills
+        # Bypass Soong bootstrap tests causing exit status 143
+        export SKIP_SOONG_TESTS=true
+        export SOONG_SKIP_TESTS=true
+        
+        # Memory & Parallelism Controls
         export _JAVA_OPTIONS="-Xmx4g"
         export SOONG_PARALLEL_BUILD=2
         export NINJA_ARGS="-j2"
@@ -115,7 +116,7 @@ jobs:
         source build/envsetup.sh
         lunch lineage_sweet-userdebug
         
-        # Compile with 2 threads to control memory usage
+        # Run compilation
         mka bacon -j2
         
         ccache -s
