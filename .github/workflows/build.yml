@@ -50,7 +50,7 @@ jobs:
       run: |
         mkdir -p ~/rom
         cd ~/rom
-        repo init -u https://github.com/LineageOS/android.git -b lineage-20 --depth=1
+        repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
         mkdir -p .repo/local_manifests
         cp $GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml .repo/local_manifests/
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
