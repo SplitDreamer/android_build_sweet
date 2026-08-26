@@ -6,6 +6,6 @@
   <!-- Vendor Tree -->
   <project path="vendor/xiaomi/sweet" name="TheMuppets/proprietary_vendor_xiaomi_sweet" remote="github" revision="lineage-20.0" />
   
-  <!-- Kernel Source -->
-  <project path="kernel/xiaomi/sweet" name="LineageOS/android_kernel_xiaomi_sweet" remote="github" revision="lineage-20.0" />
+  <!-- Common Kernel Source (SM6150 / SM7150 family) -->
+  <project path="kernel/xiaomi/sm6150" name="LineageOS/android_kernel_xiaomi_sm6150" remote="github" revision="lineage-20.0" />
 </manifest>
