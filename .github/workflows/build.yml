@@ -21,6 +21,14 @@ jobs:
         sudo rm -rf /var/lib/apt/lists/*
         df -h
 
+    - name: Create 8GB Swap Space (RAM OOM Fix)
+      run: |
+        sudo fallocate -l 8G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+        free -h
+
     - name: Install Build Dependencies
       run: |
         sudo apt-get update
@@ -64,9 +72,14 @@ jobs:
         ccache -M 10G
         ccache -z
         
+        # Limit Java Heap allocation to prevent OOM kills during Soong analysis
+        export _JAVA_OPTIONS="-Xmx4g"
+        
         source build/envsetup.sh
         lunch lineage_sweet-userdebug
-        mka bacon -j$(nproc --all)
+        
+        # Use -j2 to limit memory pressure on 7GB RAM runner
+        mka bacon -j2
         
         ccache -s
 
