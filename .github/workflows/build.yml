@@ -32,10 +32,12 @@ jobs:
         echo "=== Disk space after cleanup ==="
         df -h
 
-        - name: Create 10GB Swap Space (OOM Prevention)
+    - name: Create 10GB Swap Space (OOM Prevention)
       run: |
+        # Safely unmount existing active swap to avoid "Text file busy" error
         sudo swapoff -a || true
         sudo rm -f /swapfile
+        
         sudo fallocate -l 10G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=10240
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
