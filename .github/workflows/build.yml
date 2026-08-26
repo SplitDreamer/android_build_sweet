@@ -42,9 +42,9 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ccache-lineage-20-sweet-${{ github.sha }}
+        key: ccache-lineage-20.0-sweet-${{ github.sha }}
         restore-keys: |
-          ccache-lineage-20-sweet-
+          ccache-lineage-20.0-sweet-
 
     - name: Initialize LineageOS Source & Manifests
       run: |
@@ -55,7 +55,7 @@ jobs:
         cp $GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml .repo/local_manifests/
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
-   - name: Build LineageOS ROM
+    - name: Build LineageOS ROM
       run: |
         cd ~/rom
         export CCACHE_EXEC=$(which ccache)
@@ -73,5 +73,5 @@ jobs:
     - name: Upload Output ROM Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LineageOS-20-sweet-GApps
+        name: LineageOS-20-sweet
         path: ~/rom/out/target/product/sweet/*.zip
