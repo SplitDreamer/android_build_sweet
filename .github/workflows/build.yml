@@ -1,4 +1,4 @@
-name: Build LineageOS for Redmi Note 10 Pro
+name: Build AOSiP for Redmi Note 10 Pro (sweet)
 
 on:
   workflow_dispatch:
@@ -6,124 +6,91 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Workflow
+        uses: actions/checkout@v4
 
-    - name: Free Up Disk Space
-      run: |
-        echo "=== Disk space before cleanup ==="
-        df -h
-        
-        # Remove pre-installed runtimes and heavy packages to reclaim ~75GB
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/.ghcup
-        sudo rm -rf /usr/local/share/powershell
-        sudo rm -rf /usr/share/swift
-        sudo rm -rf /var/lib/docker
-        sudo rm -rf /usr/local/lib/node_modules
-        
-        sudo apt-get clean
-        sudo rm -rf /var/lib/apt/lists/*
-        
-        echo "=== Disk space after cleanup ==="
-        df -h
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo apt-get clean
+          echo "Disk space after cleanup:"
+          df -h
 
-    - name: Create 10GB Swap Space (OOM Prevention)
-      run: |
-        sudo swapoff -a || true
-        sudo rm -f /swapfile
-        
-        sudo fallocate -l 10G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=10240
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
-        free -h
+      - name: Create Swap Space
+        run: |
+          sudo fallocate -l 12G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
 
-    - name: Install Build Dependencies
-      run: |
-        sudo dpkg --add-architecture i386
-        
-        for i in {1..5}; do 
-          sudo apt-get update && break || sleep 5
-        done
-        
-        DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --fix-missing \
-          git-core gnupg flex bison build-essential zip curl zlib1g-dev \
-          gcc-multilib g++-multilib libc6-dev-i386 libncurses5-dev \
-          libx11-dev lib32z1-dev libgl1-mesa-dev \
-          libxml2-utils xsltproc unzip fontconfig ccache python3 python3-pip \
-          openjdk-11-jdk libssl-dev bc schedtool libtinfo5 rsync python-is-python3
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bisector build-essential ccache curl flex g++-multilib \
+            gcc-multilib git git-lfs gnupg gperf imagemagick lib32ncurses5-dev \
+            lib32readline-dev lib32z1-dev libelf-dev libgl1-mesa-dev liblz4-tool \
+            libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils \
+            lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
+            python3 python3-pip openjdk-11-jdk
 
-    - name: Install Google Repo Tool
-      run: |
-        mkdir -p ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        echo "$HOME/bin" >> $GITHUB_PATH
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
 
-    - name: Configure Git
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
+      - name: Initialize ROM Source
+        run: |
+          mkdir -p ~/rom
+          cd ~/rom
+          git config --global user.name "Maksudur"
+          git config --global user.email "your-email@example.com"
+          repo init -u https://github.com/AOSiP/platform_manifest.git -b vic --depth=1
 
-    - name: Set up CCache
-      uses: actions/cache@v4
-      with:
-        path: ~/.ccache
-        key: ccache-lineage-20.0-sweet-${{ github.sha }}
-        restore-keys: |
-          ccache-lineage-20.0-sweet-
+      - name: Sync Device, Vendor & Kernel Trees
+        run: |
+          cd ~/rom
+          mkdir -p .repo/local_manifests
+          cat <<EOF > .repo/local_manifests/sweet.xml
+          <?xml version="1.0" encoding="UTF-8"?>
+          <manifest>
+            <project path="device/xiaomi/sweet" name="LineageOS/android_device_xiaomi_sweet" remote="github" revision="lineage-21.0" />
+            <project path="device/xiaomi/sm6150-common" name="LineageOS/android_device_xiaomi_sm6150-common" remote="github" revision="lineage-21.0" />
+            <project path="vendor/xiaomi/sweet" name="itsshashanksp/vendor_xiaomi_sweet" remote="github" revision="thirteen" />
+            <project path="vendor/xiaomi/sm6150-common" name="itsshashanksp/vendor_xiaomi_sm6150-common" remote="github" revision="thirteen" />
+            <project path="kernel/xiaomi/sm6150" name="LineageOS/android_kernel_xiaomi_sm6150" remote="github" revision="lineage-21.0" />
+          </manifest>
+          EOF
+          repo sync -c -j4 --force-sync --no-clone-bundle --no-tags
 
-    - name: Initialize LineageOS Source & Manifests
-      run: |
-        mkdir -p ~/rom
-        cd ~/rom
-        repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
-        
-        mkdir -p .repo/local_manifests
-        if [ -d "$GITHUB_WORKSPACE/local_manifests" ]; then
-          cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
-        elif [ -f "$GITHUB_WORKSPACE/sweet.xml" ]; then
-          cp $GITHUB_WORKSPACE/sweet.xml .repo/local_manifests/
-        elif [ -f "$GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml" ]; then
-          cp $GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml .repo/local_manifests/
-        fi
-        
-        repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc --all)
+      - name: Set Memory & Build Environment Variables
+        run: |
+          echo "NEW_TMPDIR=$HOME/tmp" >> $GITHUB_ENV
+          echo "USE_CCACHE=1" >> $GITHUB_ENV
+          echo "CCACHE_EXEC=/usr/bin/ccache" >> $GITHUB_ENV
+          echo "_JAVA_OPTIONS=-Xmx4g" >> $GITHUB_ENV
+          echo "SOONG_UI_NUM_PARALLEL_JOBS=4" >> $GITHUB_ENV
 
-    - name: Build LineageOS ROM
-      run: |
-        cd ~/rom
-        export CCACHE_EXEC=$(which ccache)
-        export USE_CCACHE=1
-        export CCACHE_DIR=~/.ccache
-        ccache -M 15G
-        ccache -z
-        
-        # Bypass Soong bootstrap tests causing exit status 143
-        export SKIP_SOONG_TESTS=true
-        export SOONG_SKIP_TESTS=true
-        
-        # Memory & Parallelism Controls
-        export _JAVA_OPTIONS="-Xmx4g"
-        export SOONG_PARALLEL_BUILD=2
-        export NINJA_ARGS="-j2"
-        
-        source build/envsetup.sh
-        lunch lineage_sweet-userdebug
-        
-        # Run compilation
-        mka bacon -j2
-        
-        ccache -s
+      - name: Build AOSiP ROM
+        run: |
+          cd ~/rom
+          export CCACHE_DIR=~/.ccache
+          ccache -M 10G
+          source build/envsetup.sh
+          lunch aosip_sweet-userdebug
+          mka kronic -j4
 
-    - name: Upload Output ROM Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: LineageOS-20-sweet
-        path: ~/rom/out/target/product/sweet/*.zip
-        if-no-files-found: error
+      - name: Upload Output Artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: AOSiP-sweet-Build
+          path: |
+            ~/rom/out/target/product/sweet/*.zip
+            ~/rom/out/target/product/sweet/boot.img
