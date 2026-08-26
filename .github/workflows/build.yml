@@ -1,4 +1,4 @@
-name: Build LineageOS for Redmi Note 10 Pro
+name: Build LineageOS 20.0 for Redmi Note 10 Pro (sweet)
 
 on:
   workflow_dispatch:
@@ -11,19 +11,30 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Free Up Disk Space
+    - name: Maximize Available Disk Space
       run: |
+        echo "=== Disk space before cleanup ==="
+        df -h
+        
+        # Remove unused large toolchains, runtimes, and Docker images
         sudo rm -rf /usr/share/dotnet
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /opt/ghc
         sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/share/swift
+        sudo rm -rf /var/lib/docker
+        sudo rm -rf /usr/local/lib/node_modules
+        
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
+        
+        echo "=== Disk space after cleanup ==="
         df -h
 
-    - name: Create 8GB Swap Space (RAM OOM Fix)
+    - name: Create 10GB Swap File
       run: |
-        sudo fallocate -l 8G /swapfile
+        sudo fallocate -l 10G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=10240
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
@@ -37,14 +48,19 @@ jobs:
           gcc-multilib g++-multilib libc6-dev-i386 libncurses5-dev \
           x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev \
           libxml2-utils xsltproc unzip fontconfig ccache python3 python3-pip \
-          openjdk-11-jdk libssl-dev bc schedtool
-
+          openjdk-11-jdk libssl-dev bc schedtool libtinfo5 rsync
+          
     - name: Install Google Repo Tool
       run: |
         mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         echo "$HOME/bin" >> $GITHUB_PATH
+
+    - name: Configure Git & Environment
+      run: |
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@github.com"
 
     - name: Set up CCache
       uses: actions/cache@v4
@@ -54,38 +70,55 @@ jobs:
         restore-keys: |
           ccache-lineage-20.0-sweet-
 
-    - name: Initialize LineageOS Source & Manifests
+    - name: Initialize LineageOS Source & Local Manifests
       run: |
         mkdir -p ~/rom
         cd ~/rom
+        
+        # Init base LineageOS 20.0 source (shallow clone to save space)
         repo init -u https://github.com/LineageOS/android.git -b lineage-20.0 --depth=1
+        
+        # Copy local manifests safely from workspace
         mkdir -p .repo/local_manifests
-        cp $GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml .repo/local_manifests/
-        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        if [ -d "$GITHUB_WORKSPACE/local_manifests" ]; then
+          cp -r $GITHUB_WORKSPACE/local_manifests/* .repo/local_manifests/
+        elif [ -f "$GITHUB_WORKSPACE/sweet.xml" ]; then
+          cp $GITHUB_WORKSPACE/sweet.xml .repo/local_manifests/
+        elif [ -f "$GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml" ]; then
+          cp $GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml .repo/local_manifests/
+        fi
+        
+        # Sync sources with minimal network/disk footprint
+        repo sync -c --no-clone-bundle --no-tags --optimized-fetch --prune -j$(nproc --all)
 
-    - name: Build LineageOS ROM
+    - name: Execute ROM Build
       run: |
         cd ~/rom
+        
+        # CCache Settings
         export CCACHE_EXEC=$(which ccache)
         export USE_CCACHE=1
         export CCACHE_DIR=~/.ccache
-        ccache -M 10G
+        ccache -M 15G
         ccache -z
         
-        # Prevent Soong & Java Heap OOM Kills
-        export _JAVA_OPTIONS="-Xmx4g"
+        # Memory & CPU Limit Optimizations
+        export _JAVA_OPTIONS="-Xmx6g"
         export SOONG_PARALLEL_BUILD=2
         
+        # Setup environment and target
         source build/envsetup.sh
         lunch lineage_sweet-userdebug
         
-        # Compile with 2 threads
-        mka bacon -j2
+        # Start compilation
+        mka bacon -j$(nproc --all)
         
+        # Output CCache statistics
         ccache -s
 
     - name: Upload Output ROM Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: LineageOS-20-sweet
+        name: LineageOS-20-sweet-$(date +%Y%m%d)
         path: ~/rom/out/target/product/sweet/*.zip
+        if-no-files-found: error
