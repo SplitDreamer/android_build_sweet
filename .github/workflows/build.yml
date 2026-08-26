@@ -38,6 +38,14 @@ jobs:
         chmod a+x ~/bin/repo
         echo "$HOME/bin" >> $GITHUB_PATH
 
+    - name: Set up CCache (Cache restore & save)
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-lineage-20.0-sweet-${{ github.sha }}
+        restore-keys: |
+          ccache-lineage-20.0-sweet-
+
     - name: Initialize ROM & Local Manifests
       run: |
         mkdir -p ~/rom
@@ -47,12 +55,20 @@ jobs:
         cp $GITHUB_WORKSPACE/.repo/local_manifests/sweet.xml .repo/local_manifests/
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
-    - name: Build ROM
+    - name: Build ROM with CCache
       run: |
         cd ~/rom
+        export CCACHE_EXEC=$(which ccache)
+        export USE_CCACHE=1
+        export CCACHE_DIR=~/.ccache
+        ccache -M 10G
+        ccache -z
+        
         source build/envsetup.sh
         lunch lineage_sweet-userdebug
         mka bacon -j$(nproc --all)
+        
+        ccache -s
 
     - name: Upload Output ROM
       uses: actions/upload-artifact@v4
